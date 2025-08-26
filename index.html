@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Apresentação dos Resultados da 1ª Avaliação Diagnóstica 2025</title>
+  <!-- Importando Tailwind CSS para estilo rápido e Chart.js para gráficos -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <!-- Cabeçalho -->
+  <header class="bg-blue-900 text-white p-6 shadow-md">
+    <h1 class="text-2xl font-bold text-center">CCM SEBASTIÃO PARANÁ</h1>
+    <h2 class="text-xl text-center">Apresentação dos Resultados da 1ª Avaliação Diagnóstica 2025</h2>
+  </header>
+
+  <!-- Seção de seleção -->
+  <main class="p-6 max-w-4xl mx-auto">
+    <div class="mb-4">
+      <label for="serie" class="block font-semibold mb-2">Selecione a Série:</label>
+      <select id="serie" class="p-2 border rounded w-full">
+        <option value="">-- Escolha --</option>
+        <option value="3">3º Ano</option>
+        <option value="9">9º Ano</option>
+      </select>
+    </div>
+
+    <div class="mb-4">
+      <label for="aluno" class="block font-semibold mb-2">Selecione o Aluno:</label>
+      <select id="aluno" class="p-2 border rounded w-full" disabled>
+        <option value="">-- Escolha a série primeiro --</option>
+      </select>
+    </div>
+
+    <!-- Onde o gráfico será desenhado -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+      <canvas id="graficoAluno"></canvas>
+    </div>
+  </main>
+
+  <script>
+    // Objetos para armazenar os dados lidos dos CSVs
+    let dadosPort3 = [];
+    let dadosMat3 = [];
+    let dadosPort9 = [];
+    let dadosMat9 = [];
+
+    // Guardar instância do gráfico para poder atualizar depois
+    let grafico;
+
+    // Função para carregar CSV usando PapaParse
+    function carregarCSV(arquivo, destino) {
+      return new Promise((resolve) => {
+        Papa.parse(arquivo, {
+          download: true,
+          header: true,
+          complete: function(results) {
+            destino.push(...results.data);
+            resolve();
+          }
+        });
+      });
+    }
+
+    // Carregar todos os CSVs ao iniciar
+    async function inicializar() {
+      await carregarCSV("port3.csv", dadosPort3);
+      await carregarCSV("mat3.csv", dadosMat3);
+      await carregarCSV("port9.csv", dadosPort9);
+      await carregarCSV("mat9.csv", dadosMat9);
+    }
+
+    inicializar();
+
+    // Referências aos elementos HTML
+    const serieSelect = document.getElementById("serie");
+    const alunoSelect = document.getElementById("aluno");
+    const ctx = document.getElementById("graficoAluno").getContext("2d");
+
+    // Quando a série mudar, preencher os alunos correspondentes
+    serieSelect.addEventListener("change", () => {
+      alunoSelect.innerHTML = "";
+      alunoSelect.disabled = true;
+
+      let serie = serieSelect.value;
+      let alunos = [];
+
+      if (serie === "3") {
+        alunos = [...new Set(dadosPort3.map(d => d.Estudante))];
+      } else if (serie === "9") {
+        alunos = [...new Set(dadosPort9.map(d => d.Estudante))];
+      }
+
+      if (alunos.length > 0) {
+        alunoSelect.disabled = false;
+        alunoSelect.innerHTML = '<option value="">-- Escolha --</option>';
+        alunos.forEach(aluno => {
+          let opt = document.createElement("option");
+          opt.value = aluno;
+          opt.textContent = aluno;
+          alunoSelect.appendChild(opt);
+        });
+      }
+    });
+
+    // Quando o aluno for selecionado, gerar gráfico
+    alunoSelect.addEventListener("change", () => {
+      let serie = serieSelect.value;
+      let aluno = alunoSelect.value;
+
+      if (!serie || !aluno) return;
+
+      // Filtrar dados do aluno
+      let dadosPort = serie === "3" ? dadosPort3.find(d => d.Estudante === aluno) : dadosPort9.find(d => d.Estudante === aluno);
+      let dadosMat = serie === "3" ? dadosMat3.find(d => d.Estudante === aluno) : dadosMat9.find(d => d.Estudante === aluno);
+
+      if (!dadosPort || !dadosMat) return;
+
+      // Preparar os dados para o gráfico
+      let labels = ["Nível Geral", "H01","H02","H03","H04","H05","H06","H07","H08"];
+
+      let valoresPort = [parseFloat(dadosPort["Níveis de Aprendizagem"])].concat([
+        dadosPort["H 01"], dadosPort["H 02"], dadosPort["H 03"], dadosPort["H 04"],
+        dadosPort["H 05"], dadosPort["H 06"], dadosPort["H 07"], dadosPort["H 08"]
+      ].map(v => parseFloat(v)));
+
+      let valoresMat = [parseFloat(dadosMat["Níveis de Aprendizagem"])].concat([
+        dadosMat["H 01"], dadosMat["H 02"], dadosMat["H 03"], dadosMat["H 04"],
+        dadosMat["H 05"], dadosMat["H 06"], dadosMat["H 07"], dadosMat["H 08"]
+      ].map(v => parseFloat(v)));
+
+      // Se já existir gráfico, destruir antes de redesenhar
+      if (grafico) {
+        grafico.destroy();
+      }
+
+      // Criar gráfico com Chart.js
+      grafico = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "Português",
+              data: valoresPort,
+              backgroundColor: "rgba(54, 162, 235, 0.7)"
+            },
+            {
+              label: "Matemática",
+              data: valoresMat,
+              backgroundColor: "rgba(255, 99, 132, 0.7)"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                // Mostra o valor exato ao passar o mouse
+                label: function(context) {
+                  return context.dataset.label + ": " + context.raw;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
